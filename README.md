@@ -1,5 +1,5 @@
 # DropboxEncryptedUploader
-Synchronizes local folder to Dropbox encrypting each file to a separate zip archive. Works in memory without storing to disk. Each file is devided by 140mb blocks and each block is encrypted on the fly, immediately sent to Dropbox servers and then thrown away so the whole encrypted archive (be it even 300 GB) will not take much space on your machine.
+Synchronizes local folder to Dropbox encrypting each file to a separate zip archive. Works in memory without storing to disk. Each file is devided by 140mb blocks, each block is encrypted on the fly and immediately sent to Dropbox servers so the whole encrypted archive (be it even 300 GB) will not take more than just 140mb of RAM.
 ## Usage
 DropboxEncryptedUploader.exe dropbox-app-token path-to-folder dropbox-folder-name encryption-password
 ### Example
