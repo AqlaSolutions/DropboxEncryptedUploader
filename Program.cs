@@ -54,7 +54,7 @@ namespace DropboxEncrypedUploader
                         if (newFiles.Contains(withoutZip))
                         {
                             var info = new FileInfo(Path.Combine(localDirectory, withoutZip));
-                            if (info.LastWriteTimeUtc == entry.AsFile.ClientModified)
+                            if ((info.LastWriteTimeUtc - entry.AsFile.ClientModified).TotalSeconds < 1f)
                                 newFiles.Remove(withoutZip);
                         }
                         else
