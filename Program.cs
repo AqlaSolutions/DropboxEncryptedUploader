@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Dropbox.Api;
 using Dropbox.Api.Files;
@@ -41,13 +42,24 @@ namespace DropboxEncrypedUploader
                     }
 
 
+                    var existingFiles = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+                    var existingFolders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+                    existingFolders.Add("");
+
                     for (var list = await dropbox.Files.ListFolderAsync(dropboxDirectory.TrimEnd('/'), true, limit: 2000);
                         list != null;
                         list = list.HasMore ? await dropbox.Files.ListFolderContinueAsync(list.Cursor) : null)
                     {
                         foreach (var entry in list.Entries)
                         {
-                            if (!entry.IsFile) continue;
+                            if (!entry.IsFile)
+                            {
+                                if (entry.IsFolder)
+                                    existingFolders.Add(entry.AsFolder.PathLower);
+                                continue;
+                            }
+
+                            existingFiles.Add(entry.PathLower);
                             var relativePath = entry.PathLower.Substring(dropboxDirectory.Length);
                             if (!relativePath.EndsWith(".zip")) continue;
                             var withoutZip = relativePath.Substring(0, relativePath.Length - 4).Replace("/", Path.DirectorySeparatorChar + "");
@@ -62,10 +74,30 @@ namespace DropboxEncrypedUploader
                         }
                     }
 
-                    if (filesToDelete.Count > 0)
+                    await DeleteFilesBatchAsync();
+
+                    ulong deletingAccumulatedSize = 0;
+
+                    async Task DeleteFilesBatchAsync()
                     {
-                        Console.WriteLine($"Deleting files: \n{string.Join("\n", filesToDelete)}");
-                        await dropbox.Files.DeleteBatchAsync(filesToDelete.Select(x => new DeleteArg(x)));
+                        if (filesToDelete.Count > 0)
+                        {
+                            Console.WriteLine($"Deleting files: \n{string.Join("\n", filesToDelete)}");
+                            var j = await dropbox.Files.DeleteBatchAsync(filesToDelete.Select(x => new DeleteArg(x)));
+                            if (j.IsAsyncJobId)
+                            {
+
+                                for (DeleteBatchJobStatus r = await dropbox.Files.DeleteBatchCheckAsync(j.AsAsyncJobId.Value);
+                                    r.IsInProgress;
+                                    r = await dropbox.Files.DeleteBatchCheckAsync(j.AsAsyncJobId.Value))
+                                {
+                                    Thread.Sleep(5000);
+                                }
+                            }
+
+                            filesToDelete.Clear();
+                            deletingAccumulatedSize = 0;
+                        }
                     }
 
                     if (newFiles.Count > 0)
@@ -156,6 +188,66 @@ namespace DropboxEncrypedUploader
                             }
                         }
                     }
+
+                    Console.WriteLine("Recycling deleted files for endless storage");
+
+                    const ulong deletingBatchSize = 1024UL * 1024 * 1024 * 32;
+
+                    for (var list = await dropbox.Files.ListFolderAsync(dropboxDirectory.TrimEnd('/'), true, limit: 2000, includeDeleted: true);
+                        list != null;
+                        list = list.HasMore ? await dropbox.Files.ListFolderContinueAsync(list.Cursor) : null)
+                    {
+                        foreach (var entry in list.Entries)
+                        {
+                            if (!entry.IsDeleted || existingFiles.Contains(entry.PathLower)) continue;
+
+                            var parentFolder = entry.PathLower;
+                            int lastSlash = parentFolder.LastIndexOf('/');
+                            if (lastSlash == -1) continue;
+                            parentFolder = parentFolder.Substring(0, lastSlash);
+                            if (!existingFolders.Contains(parentFolder)) continue;
+
+                            ListRevisionsResult rev;
+                            try
+                            {
+                                rev = await dropbox.Files.ListRevisionsAsync(entry.AsDeleted.PathLower, ListRevisionsMode.Path.Instance, 1);
+
+                            }
+                            catch
+                            {
+                                // get revisions doesn't work for folders but no way to check if it's a folder beforehand
+                                continue;
+                            }
+
+                            if (!(DateTime.UtcNow - rev.ServerDeleted >= TimeSpan.FromDays(15)) || (DateTime.UtcNow - rev.ServerDeleted > TimeSpan.FromDays(29)))
+                            {
+                                // don't need to restore too young
+                                // can't restore too old
+                                continue;
+                            }
+
+                            Console.WriteLine("Restoring " + entry.PathDisplay);
+                            var restored = await dropbox.Files.RestoreAsync(entry.PathLower, rev.Entries.First().Rev);
+
+                            if (restored.AsFile.Size >= deletingBatchSize && filesToDelete.Count == 0)
+                            {
+                                Console.WriteLine("Deleting " + entry.PathDisplay);
+                                await dropbox.Files.DeleteV2Async(restored.PathLower, restored.Rev);
+                            }
+                            else
+                            {
+                                // warning: rev not included, concurrent modification changes may be lost
+                                filesToDelete.Add(restored.PathLower);
+                                deletingAccumulatedSize += restored.Size;
+
+                                if (deletingAccumulatedSize >= deletingBatchSize)
+                                    await DeleteFilesBatchAsync();
+                            }
+
+                        }
+                    }
+                    await DeleteFilesBatchAsync();
+
                 }
 
                 Console.WriteLine("All done");
