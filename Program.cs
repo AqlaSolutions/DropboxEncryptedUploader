@@ -25,9 +25,15 @@ namespace DropboxEncrypedUploader
                     dropboxDirectory += Path.AltDirectorySeparatorChar;
                 string password = args[3];
 
+                bool localExists = Directory.Exists(localDirectory);
+                if (!localExists)
+                    Console.WriteLine("Local directory does not exist: " + localDirectory);
+
                 var newFiles = new HashSet<string>(
-                    Directory.GetFiles(localDirectory, "*", SearchOption.AllDirectories)
-                        .Select(f => f.Substring(localDirectory.Length)), StringComparer.OrdinalIgnoreCase);
+                    localExists
+                        ? Directory.GetFiles(localDirectory, "*", SearchOption.AllDirectories)
+                            .Select(f => f.Substring(localDirectory.Length))
+                        : [], StringComparer.OrdinalIgnoreCase);
 
                 var filesToDelete = new HashSet<string>();
 
@@ -69,7 +75,7 @@ namespace DropboxEncrypedUploader
                                 if ((info.LastWriteTimeUtc - entry.AsFile.ClientModified).TotalSeconds < 1f)
                                     newFiles.Remove(withoutZip);
                             }
-                            else
+                            else if (localExists)
                                 filesToDelete.Add(entry.PathLower);
                         }
                     }
@@ -227,21 +233,28 @@ namespace DropboxEncrypedUploader
                             }
 
                             Console.WriteLine("Restoring " + entry.PathDisplay);
-                            var restored = await dropbox.Files.RestoreAsync(entry.PathLower, rev.Entries.First().Rev);
-
-                            if (restored.AsFile.Size >= deletingBatchSize && filesToDelete.Count == 0)
+                            try
                             {
-                                Console.WriteLine("Deleting " + entry.PathDisplay);
-                                await dropbox.Files.DeleteV2Async(restored.PathLower, restored.Rev);
+                                var restored = await dropbox.Files.RestoreAsync(entry.PathDisplay, rev.Entries.OrderByDescending(x => x.ClientModified).First().Rev);
+
+                                if (restored.AsFile.Size >= deletingBatchSize && filesToDelete.Count == 0)
+                                {
+                                    Console.WriteLine("Deleting " + entry.PathDisplay);
+                                    await dropbox.Files.DeleteV2Async(restored.PathLower, restored.Rev);
+                                }
+                                else
+                                {
+                                    // warning: rev not included, concurrent modification changes may be lost
+                                    filesToDelete.Add(restored.PathLower);
+                                    deletingAccumulatedSize += restored.Size;
+
+                                    if (deletingAccumulatedSize >= deletingBatchSize)
+                                        await DeleteFilesBatchAsync();
+                                }
                             }
-                            else
+                            catch (Exception ex)
                             {
-                                // warning: rev not included, concurrent modification changes may be lost
-                                filesToDelete.Add(restored.PathLower);
-                                deletingAccumulatedSize += restored.Size;
-
-                                if (deletingAccumulatedSize >= deletingBatchSize)
-                                    await DeleteFilesBatchAsync();
+                                Console.WriteLine(ex);
                             }
 
                         }
