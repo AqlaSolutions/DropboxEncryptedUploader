@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Dropbox.Api;
@@ -37,7 +38,12 @@ namespace DropboxEncrypedUploader
 
                 var filesToDelete = new HashSet<string>();
 
-                using (var dropbox = new DropboxClient(token))
+                var config = new DropboxClientConfig()
+                {
+                    HttpClient = new HttpClient() { Timeout = TimeSpan.FromMinutes(5) },
+                    LongPollHttpClient = new HttpClient() { Timeout = TimeSpan.FromMinutes(10) }
+                };
+                using (var dropbox = new DropboxClient(token, config))
                 {
                     try
                     {
@@ -112,8 +118,8 @@ namespace DropboxEncrypedUploader
                         ZipStrings.UseUnicode = true;
                         ZipStrings.CodePage = 65001;
                         var entryFactory = new ZipEntryFactory();
-                        byte[] msBuffer = new byte[1000 * 1000 * 150];
-                        int bufferSize = 1000 * 1000 * 140;
+                        byte[] msBuffer = new byte[1000 * 1000 * 99];
+                        int bufferSize = 1000 * 1000 * 90;
                         using var reader = new AsyncMultiFileReader(bufferSize, (f, t) => new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, true));
                         var newFilesList = newFiles.ToList();
                         for (int i = 0; i < newFilesList.Count; i++)
@@ -154,10 +160,26 @@ namespace DropboxEncrypedUploader
                                             zipWriter.Flush();
                                             bufferStream.Position = 0;
                                             var length = bufferStream.Length;
-                                            if (session == null)
-                                                session = await dropbox.Files.UploadSessionStartAsync(new UploadSessionStartArg(), bufferStream);
-                                            else
-                                                await dropbox.Files.UploadSessionAppendV2Async(new UploadSessionCursor(session.SessionId, (ulong) offset), false, bufferStream);
+
+                                            for (int retry = 0;; retry++)
+                                            {
+                                                try
+                                                {
+                                                    if (session == null)
+                                                        session = await dropbox.Files.UploadSessionStartAsync(new UploadSessionStartArg(), bufferStream);
+                                                    else
+                                                        await dropbox.Files.UploadSessionAppendV2Async(new UploadSessionCursor(session.SessionId, (ulong)offset), false,
+                                                            body: bufferStream);
+                                                    break;
+                                                }
+                                                catch (TaskCanceledException) when (retry < 10)
+                                                {
+                                                    bufferStream = new MemoryStream(msBuffer);
+                                                    bufferStream.Position = 0;
+                                                    bufferStream.SetLength(length);
+                                                }
+                                            }
+
                                             offset += length;
                                             zipWriterUnderlyingStream.CopyTo = bufferStream = new MemoryStream(msBuffer);
                                             bufferStream.SetLength(0);
@@ -170,8 +192,9 @@ namespace DropboxEncrypedUploader
                                         zipWriter.Finish();
                                         zipWriter.Close();
                                     }
-                                    catch
+                                    catch (Exception ex)
                                     {
+                                        Console.WriteLine(ex);
                                         // disposing ZipOutputStream causes writing to bufferStream
                                         if (!bufferStream.CanRead && !bufferStream.CanWrite)
                                             zipWriterUnderlyingStream.CopyTo = bufferStream = new MemoryStream(msBuffer);
@@ -186,10 +209,16 @@ namespace DropboxEncrypedUploader
                                     clientModifiedAt);
 
                                 if (session == null)
-                                    await dropbox.Files.UploadAsync(commitInfo, bufferStream);
-                                else
                                 {
-                                    await dropbox.Files.UploadSessionFinishAsync(new UploadSessionCursor(session.SessionId, (ulong) offset), commitInfo, bufferStream);
+                                    await dropbox.Files.UploadAsync(commitInfo.Path,
+                                        commitInfo.Mode,
+                                        commitInfo.Autorename,
+                                        commitInfo.ClientModified,
+                                        body: bufferStream);
+                                }
+                                else                           
+                                {
+                                    await dropbox.Files.UploadSessionFinishAsync(new UploadSessionCursor(session.SessionId, (ulong)offset), commitInfo, body: bufferStream);
                                 }
                             }
                         }
