@@ -77,7 +77,7 @@
     <Compile Include="ConfigurationTests.cs" />
     <Compile Include="SyncServiceTests.cs" />
     <Compile Include="StorageRecyclingServiceTests.cs" />
-    <Compile Include="UploadSessionManagerTests.cs" />
+    <Compile Include="DropboxContentHasherTests.cs" />
     <Compile Include="EncryptedUploadStrategyTests.cs" />
     <Compile Include="DirectUploadStrategyTests.cs" />
     <Compile Include="IntegrationTests.cs" />

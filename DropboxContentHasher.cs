@@ -20,6 +20,7 @@ limitations under the License.
 
 using System;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace DropboxEncrypedUploader;
 
@@ -51,23 +52,14 @@ namespace DropboxEncrypedUploader;
 /// string hexHash = DropboxContentHasher.ToHex(hasher.Hash);
 /// Console.WriteLine(hexHash);
 /// </example>
-public class DropboxContentHasher : HashAlgorithm
+public class DropboxContentHasher(SHA256 overallHasher, SHA256 blockHasher, int blockPos) : HashAlgorithm
 {
-    private SHA256 overallHasher;
-    private SHA256 blockHasher;
-    private int blockPos = 0;
+    private int blockPos = blockPos;
 
     public const int BLOCK_SIZE = 4 * 1024 * 1024;
 
     public DropboxContentHasher() : this(SHA256.Create(), SHA256.Create(), 0)
     {
-    }
-
-    public DropboxContentHasher(SHA256 overallHasher, SHA256 blockHasher, int blockPos)
-    {
-        this.overallHasher = overallHasher;
-        this.blockHasher = blockHasher;
-        this.blockPos = blockPos;
     }
 
     public override int HashSize
@@ -85,7 +77,7 @@ public class DropboxContentHasher : HashAlgorithm
                 FinishBlock();
             }
 
-            int spaceInBlock = BLOCK_SIZE - this.blockPos;
+            int spaceInBlock = BLOCK_SIZE - blockPos;
             int inputPartEnd = Math.Min(inputEnd, offset + spaceInBlock);
             int inputPartLength = inputPartEnd - offset;
             blockHasher.TransformBlock(input, offset, inputPartLength, input, offset);
@@ -115,7 +107,7 @@ public class DropboxContentHasher : HashAlgorithm
 
     private void FinishBlock()
     {
-        blockHasher.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+        blockHasher.TransformFinalBlock([], 0, 0);
         byte[] blockHash = blockHasher.Hash;
         blockHasher.Initialize();
 
@@ -130,13 +122,25 @@ public class DropboxContentHasher : HashAlgorithm
     /// </summary>
     public static string ToHex(byte[] data)
     {
-        var r = new System.Text.StringBuilder();
+        var r = new StringBuilder();
         foreach (byte b in data)
         {
-            r.Append(HEX_DIGITS[(b >> 4)]);
-            r.Append(HEX_DIGITS[(b & 0xF)]);
+            r.Append(HEX_DIGITS[b >> 4]);
+            r.Append(HEX_DIGITS[b & 0xF]);
         }
 
         return r.ToString();
+    }
+
+    /// <summary>
+    /// Computes the Dropbox content hash for a buffer.
+    /// Returns the hash as a hexadecimal string.
+    /// </summary>
+    public static string ComputeHash(byte[] buffer, int length)
+    {
+        using var hasher = new DropboxContentHasher();
+        hasher.TransformBlock(buffer, 0, length, buffer, 0);
+        hasher.TransformFinalBlock([], 0, 0);
+        return ToHex(hasher.Hash);
     }
 }

@@ -76,6 +76,7 @@
     <Compile Include="Infrastructure\ConsoleProgressReporter.cs" />
     <Compile Include="Infrastructure\CopyStream.cs" />
     <Compile Include="Infrastructure\IProgressReporter.cs" />
+    <Compile Include="IsExternalInit.cs" />
     <Compile Include="Models\FileToUpload.cs" />
     <Compile Include="Models\SyncResult.cs" />
     <Compile Include="Program.cs" />
@@ -88,6 +89,7 @@
     <Compile Include="Services\ISyncService.cs" />
     <Compile Include="Services\StorageRecyclingService.cs" />
     <Compile Include="Services\SyncService.cs" />
+    <Compile Include="Upload\BaseUploadStrategy.cs" />
     <Compile Include="Upload\DirectUploadStrategy.cs" />
     <Compile Include="Upload\EncryptedUploadStrategy.cs" />
     <Compile Include="Upload\IUploadSessionManager.cs" />
