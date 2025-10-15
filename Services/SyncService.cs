@@ -20,19 +20,6 @@ public class SyncService(
     : ISyncService
 {
     /// <summary>
-    /// Analyzes local and remote directories and returns what needs to be synced.
-    /// This is a convenience method that calls the individual analysis methods.
-    /// </summary>
-    public async Task<SyncResult> AnalyzeSyncAsync()
-    {
-        var localFiles = GetLocalFiles();
-        var (existingFiles, existingFolders, remoteFilesByOriginalName) = await GetRemoteFilesAsync();
-        var (filesToUpload, filesToDelete) = DetermineSync(localFiles, remoteFilesByOriginalName);
-
-        return new SyncResult(filesToUpload, filesToDelete, existingFiles, existingFolders);
-    }
-
-    /// <summary>
     /// Gets all local files as a set of relative paths.
     /// </summary>
     public HashSet<string> GetLocalFiles()
@@ -75,26 +62,42 @@ public class SyncService(
                 continue;
 
             existingFiles.Add(entry.PathLower);
-            var relativePath = entry.PathLower.Substring(config.DropboxDirectory.Length);
 
-            // Strip .zip extension if using encryption
-            string originalFileName;
-            if (config.UseEncryption)
+            // Transform remote path to local filename
+            if (TryTransformRemotePathToLocal(entry.PathLower, out string originalFileName))
             {
-                if (!relativePath.EndsWith(".zip"))
-                    continue;
-                originalFileName = relativePath.Substring(0, relativePath.Length - 4)
-                    .Replace("/", Path.DirectorySeparatorChar.ToString());
+                remoteFilesByOriginalName[originalFileName] = entry.AsFile;
             }
-            else
-            {
-                originalFileName = relativePath.Replace("/", Path.DirectorySeparatorChar.ToString());
-            }
-
-            remoteFilesByOriginalName[originalFileName] = entry.AsFile;
         }
 
         return (existingFiles, existingFolders, remoteFilesByOriginalName);
+    }
+
+    /// <summary>
+    /// Transforms a remote Dropbox path to a local filename.
+    /// Strips the base directory, handles encryption extension (.zip), and converts path separators.
+    /// </summary>
+    /// <param name="remotePathLower">The remote path (lowercase) from Dropbox</param>
+    /// <param name="localFileName">The transformed local filename, or null if transformation fails</param>
+    /// <returns>True if transformation succeeded, false if file should be skipped</returns>
+    private bool TryTransformRemotePathToLocal(string remotePathLower, out string localFileName)
+    {
+        var relativePath = remotePathLower.Substring(config.DropboxDirectory.Length);
+
+        // Strip .zip extension if using encryption
+        if (config.UseEncryption)
+        {
+            if (!relativePath.EndsWith(".zip"))
+            {
+                localFileName = null;
+                return false;
+            }
+            relativePath = relativePath.Substring(0, relativePath.Length - 4);
+        }
+
+        // Convert forward slashes to platform-specific directory separator
+        localFileName = relativePath.Replace("/", Path.DirectorySeparatorChar.ToString());
+        return true;
     }
 
     /// <summary>
@@ -102,11 +105,14 @@ public class SyncService(
     /// </summary>
     public (List<FileToUpload> FilesToUpload, HashSet<string> FilesToDelete) DetermineSync(
         HashSet<string> localFiles,
-        Dictionary<string, FileMetadata> remoteFilesByOriginalName)
+        Dictionary<string, FileMetadata> remoteFilesByOriginalName,
+        bool localDirectoryExists)
     {
         var filesToUpload = new List<FileToUpload>();
         var filesToDelete = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        bool localExists = fileSystem.DirectoryExists(config.LocalDirectory);
+
+        // Create a mutable copy to track which files need uploading
+        var filesToUploadSet = new HashSet<string>(localFiles, StringComparer.OrdinalIgnoreCase);
 
         // Check each remote file
         foreach (var kvp in remoteFilesByOriginalName)
@@ -122,9 +128,9 @@ public class SyncService(
 
                 // Skip upload if timestamps match within tolerance (1 second)
                 if ((lastWriteTimeUtc - remoteFile.ClientModified).TotalSeconds < config.TimestampToleranceSeconds)
-                    localFiles.Remove(originalFileName);
+                    filesToUploadSet.Remove(originalFileName);
             }
-            else if (localExists)
+            else if (localDirectoryExists)
             {
                 // File exists remotely but not locally - mark for deletion
                 filesToDelete.Add(remoteFile.PathLower);
@@ -132,7 +138,7 @@ public class SyncService(
         }
 
         // Build list of files to upload (remaining local files)
-        foreach (var relativePath in localFiles)
+        foreach (var relativePath in filesToUploadSet)
         {
             string fullPath = Path.Combine(config.LocalDirectory, relativePath);
             var (fileSize, lastWriteTimeUtc) = fileSystem.GetFileInfo(fullPath);

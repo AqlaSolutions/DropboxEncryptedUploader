@@ -18,28 +18,18 @@ public class StorageRecyclingService(
     : IStorageRecyclingService
 {
     /// <summary>
-    /// Recycles deleted files within the configured age range.
-    /// This is a convenience method that orchestrates the entire recycling process.
-    /// </summary>
-    public async Task RecycleDeletedFilesAsync(SyncResult syncResult)
-    {
-        progress.ReportMessage("Recycling deleted files for endless storage");
-
-        var deletedFiles = await ListRecyclableDeletedFilesAsync(syncResult);
-        await RestoreAndDeleteFilesAsync(deletedFiles);
-    }
-
-    /// <summary>
     /// Lists all recyclable deleted files from Dropbox that meet the criteria.
     /// </summary>
-    public async Task<List<(string PathDisplay, string PathLower, FileMetadata Metadata)>> ListRecyclableDeletedFilesAsync(SyncResult syncResult)
+    public async Task<List<(string PathDisplay, string PathLower, FileMetadata Metadata)>> ListRecyclableDeletedFilesAsync(
+        HashSet<string> existingFiles,
+        HashSet<string> existingFolders)
     {
         var recyclableFiles = new List<(string PathDisplay, string PathLower, FileMetadata Metadata)>();
 
         foreach (var entry in await dropbox.ListAllFilesAsync(config.DropboxDirectory, includeDeleted: true))
         {
             // Skip if not deleted or if file still exists
-            if (!entry.IsDeleted || syncResult.ExistingFiles.Contains(entry.PathLower))
+            if (!entry.IsDeleted || existingFiles.Contains(entry.PathLower))
                 continue;
 
             // Check if parent folder exists
@@ -48,7 +38,7 @@ public class StorageRecyclingService(
             if (lastSlash == -1)
                 continue;
             parentFolder = parentFolder.Substring(0, lastSlash);
-            if (!syncResult.ExistingFolders.Contains(parentFolder))
+            if (!existingFolders.Contains(parentFolder))
                 continue;
 
             // Get revisions

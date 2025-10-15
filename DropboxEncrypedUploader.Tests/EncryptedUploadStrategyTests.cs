@@ -31,46 +31,8 @@ public class EncryptedUploadStrategyTests
         _mockReader = new Mock<AsyncMultiFileReader>(_config.ReadBufferSize, null);
     }
 
-    [TestMethod]
-    public async Task UploadFileAsync_CallsOpenNextFile()
-    {
-        // Verifies that reader.OpenNextFile() is called (Program.old.cs equivalent at line 149)
-        var fileToUpload = new FileToUpload(
-            "test.txt",
-            @"C:\local\test.txt",
-            "/dropbox/test.txt.zip",
-            0,
-            DateTime.UtcNow);
-
-        _mockReader.Setup(r => r.ReadNextBlock()).Returns(0); // Empty file
-
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
-
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
-
-        _mockReader.Verify(r => r.OpenNextFile(), Times.Once);
-    }
-
-    [TestMethod]
-    public async Task UploadFileAsync_SetsNextFileForPreOpening()
-    {
-        // Verifies Program.old.cs lines 484-485 - pre-opening optimization
-        var fileToUpload = new FileToUpload(
-            "test.txt",
-            @"C:\local\test.txt",
-            "/dropbox/test.txt.zip",
-            0,
-            DateTime.UtcNow);
-
-        _mockReader.Setup(r => r.ReadNextBlock()).Returns(0);
-        _mockReader.SetupProperty(r => r.NextFile);
-
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
-
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], @"C:\local\next.txt");
-
-        _mockReader.VerifySet(r => r.NextFile = It.Is<(string, object)>(t => t.Item1 == @"C:\local\next.txt"), Times.Once);
-    }
+    // NOTE: Reader state management tests removed - now handled by Program.cs
+    // OpenNextFile() and NextFile assignment are orchestrated by the caller, not the strategy
 
     [TestMethod]
     public async Task UploadFileAsync_ReportsProgress()
@@ -87,7 +49,7 @@ public class EncryptedUploadStrategyTests
 
         var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         _mockProgress.Verify(p => p.ReportProgress("test.txt", 0, 100), Times.Once);
     }
@@ -107,7 +69,7 @@ public class EncryptedUploadStrategyTests
 
         var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         _mockProgress.Verify(p => p.ReportComplete("test.txt", ""), Times.Once);
     }
@@ -127,7 +89,7 @@ public class EncryptedUploadStrategyTests
 
         var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Should call SimpleUploadAsync for final chunk (even if empty)
         _mockSessionManager.Verify(s => s.SimpleUploadAsync(
@@ -161,7 +123,7 @@ public class EncryptedUploadStrategyTests
 
         var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Should use session upload (Start + Finish) because ZIP footer creates second chunk
         _mockSessionManager.Verify(s => s.StartSessionAsync(
@@ -205,7 +167,7 @@ public class EncryptedUploadStrategyTests
 
         var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[102400], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Should start session, append, then finish
         _mockSessionManager.Verify(s => s.StartSessionAsync(
@@ -241,7 +203,7 @@ public class EncryptedUploadStrategyTests
 
         var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         _mockSessionManager.Verify(s => s.SimpleUploadAsync(
             It.Is<CommitInfo>(c =>
@@ -269,7 +231,7 @@ public class EncryptedUploadStrategyTests
         var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
 
         await Assert.ThrowsExceptionAsync<IOException>(() =>
-            strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null));
+            strategy.UploadFileAsync(fileToUpload, _mockReader.Object));
 
         _mockProgress.Verify(p => p.ReportMessage(It.Is<string>(s => s.Contains("Error during encrypted upload"))), Times.Once);
     }

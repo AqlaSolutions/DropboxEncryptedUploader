@@ -12,8 +12,6 @@ public interface IUploadStrategy
     /// Uploads a file to Dropbox.
     /// </summary>
     /// <param name="fileToUpload">File information</param>
-    /// <param name="reader">Multi-file reader (already configured with NextFile)</param>
-    /// <param name="buffer">Reusable buffer for uploads</param>
-    /// <param name="nextFilePathForPreOpen">Optional path to next file for pre-opening optimization</param>
-    Task UploadFileAsync(FileToUpload fileToUpload, AsyncMultiFileReader reader, byte[] buffer, string nextFilePathForPreOpen);
+    /// <param name="reader">Multi-file reader (already opened and positioned at the file to upload)</param>
+    Task UploadFileAsync(FileToUpload fileToUpload, AsyncMultiFileReader reader);
 }

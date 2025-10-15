@@ -16,6 +16,7 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
     private readonly IProgressReporter _progress;
     private readonly Configuration.Configuration _config;
     private readonly ZipEntryFactory _entryFactory = new();
+    private readonly byte[] _buffer;
 
     public EncryptedUploadStrategy(
         IUploadSessionManager sessionManager,
@@ -25,23 +26,16 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
     {
         _progress = progress;
         _config = config;
+        _buffer = new byte[config.MaxBufferAllocation]; // 99MB buffer for encrypted output
     }
 
-    public async Task UploadFileAsync(FileToUpload fileToUpload, AsyncMultiFileReader reader, byte[] buffer, string nextFilePathForPreOpen)
+    public async Task UploadFileAsync(FileToUpload fileToUpload, AsyncMultiFileReader reader)
     {
         _progress.ReportProgress(fileToUpload.RelativePath, 0, fileToUpload.FileSize);
 
-        reader.OpenNextFile();
-
-        // Set next file for pre-opening optimization (after OpenNextFile clears it)
-        if (nextFilePathForPreOpen != null)
-        {
-            reader.NextFile = (nextFilePathForPreOpen, null);
-        }
-
         using (var zipWriterUnderlyingStream = new CopyStream())
         {
-            var bufferStream = new MemoryStream(buffer);
+            var bufferStream = new MemoryStream(_buffer);
             bufferStream.SetLength(0);
 
             UploadSessionStartResult session = null;
@@ -81,10 +75,10 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
                         var length = bufferStream.Length;
 
                         // Upload chunk
-                        session = await UploadChunkAsync(session, offset, buffer, length);
+                        session = await UploadChunkAsync(session, offset, _buffer, length);
 
                         offset += length;
-                        zipWriterUnderlyingStream.CopyTo = bufferStream = new MemoryStream(buffer);
+                        zipWriterUnderlyingStream.CopyTo = bufferStream = new MemoryStream(_buffer);
                         bufferStream.SetLength(0);
                     }
 
@@ -99,7 +93,7 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
                     _progress.ReportMessage("Error during encrypted upload: " + ex);
                     // Disposing ZipOutputStream causes writing to bufferStream
                     if (!bufferStream.CanRead && !bufferStream.CanWrite)
-                        zipWriterUnderlyingStream.CopyTo = new MemoryStream(buffer);
+                        zipWriterUnderlyingStream.CopyTo = new MemoryStream(_buffer);
                     throw;
                 }
             }
@@ -109,7 +103,7 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
             var finalLength = bufferStream.Length;
             var commitInfo = CreateCommitInfo(fileToUpload);
 
-            await FinishUploadAsync(session, offset, commitInfo, buffer, finalLength);
+            await FinishUploadAsync(session, offset, commitInfo, _buffer, finalLength);
         }
     }
 }

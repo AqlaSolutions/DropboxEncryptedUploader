@@ -6,16 +6,10 @@ using DropboxEncrypedUploader.Models;
 namespace DropboxEncrypedUploader.Services;
 
 /// <summary>
-/// Analyzes local and remote directories to determine sync operations needed.
+/// Provides sync analysis operations for comparing local and remote directories.
 /// </summary>
 public interface ISyncService
 {
-    /// <summary>
-    /// Analyzes local and remote directories and returns what needs to be synced.
-    /// This is a convenience method that orchestrates the sync analysis.
-    /// </summary>
-    Task<SyncResult> AnalyzeSyncAsync();
-
     /// <summary>
     /// Gets all local files as a set of relative paths.
     /// </summary>
@@ -32,5 +26,6 @@ public interface ISyncService
     /// </summary>
     (List<FileToUpload> FilesToUpload, HashSet<string> FilesToDelete) DetermineSync(
         HashSet<string> localFiles,
-        Dictionary<string, FileMetadata> remoteFilesByOriginalName);
+        Dictionary<string, FileMetadata> remoteFilesByOriginalName,
+        bool localDirectoryExists);
 }

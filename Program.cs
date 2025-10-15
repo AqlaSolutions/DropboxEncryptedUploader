@@ -29,6 +29,7 @@ internal class Program
             var fileSystem = new FileSystemService();
             var dropbox = new DropboxService(config);
             var syncService = new SyncService(fileSystem, dropbox, progress, config);
+            var syncFacade = new SyncFacade(syncService, fileSystem, config);
             var sessionManager = new UploadSessionManager(dropbox, config.MaxRetries);
             var encryptedUploadStrategy = new EncryptedUploadStrategy(sessionManager, progress, config);
             var directUploadStrategy = new DirectUploadStrategy(sessionManager, progress);
@@ -40,7 +41,7 @@ internal class Program
                 await dropbox.CreateFolderAsync(config.DropboxDirectory);
 
                 // 4. Analyze sync
-                var syncResult = await syncService.AnalyzeSyncAsync();
+                var syncResult = await syncFacade.AnalyzeSyncAsync();
 
                 // 5. Delete files that no longer exist locally
                 if (syncResult.FilesToDelete.Count > 0)
@@ -54,7 +55,6 @@ internal class Program
                 {
                     progress.ReportFileCount(syncResult.FilesToUpload.Count);
 
-                    byte[] msBuffer = new byte[config.MaxBufferAllocation];
                     using var reader = new AsyncMultiFileReader(
                         config.ReadBufferSize,
                         (f, t) => new FileStream(
@@ -74,23 +74,27 @@ internal class Program
                     {
                         var fileToUpload = syncResult.FilesToUpload[i];
 
-                        // Set NextFile for current upload
+                        // Set current file and open it
                         reader.NextFile = (fileToUpload.FullPath, null);
+                        reader.OpenNextFile();
 
-                        // Determine next file path for pre-opening optimization
-                        string nextFilePath = null;
+                        // Set next file for pre-opening optimization
                         if (i < syncResult.FilesToUpload.Count - 1)
                         {
-                            nextFilePath = syncResult.FilesToUpload[i + 1].FullPath;
+                            reader.NextFile = (syncResult.FilesToUpload[i + 1].FullPath, null);
                         }
 
                         // Upload file (no per-file try-catch - preserve fail-fast behavior)
-                        await strategy.UploadFileAsync(fileToUpload, reader, msBuffer, nextFilePath);
+                        await strategy.UploadFileAsync(fileToUpload, reader);
                     }
                 }
 
                 // 7. Recycle deleted files
-                await recyclingService.RecycleDeletedFilesAsync(syncResult);
+                progress.ReportMessage("Recycling deleted files for endless storage");
+                var deletedFiles = await recyclingService.ListRecyclableDeletedFilesAsync(
+                    syncResult.ExistingFiles,
+                    syncResult.ExistingFolders);
+                await recyclingService.RestoreAndDeleteFilesAsync(deletedFiles);
             }
 
             progress.ReportMessage("All done");

@@ -67,21 +67,6 @@ public class StorageRecyclingServiceTests
     }
 
     [TestMethod]
-    public async Task RecycleDeletedFilesAsync_ReportsMessage()
-    {
-        // Verifies Program.old.cs line 283
-        _mockDropbox.Setup(d => d.ListAllFilesAsync(_config.DropboxDirectory, true))
-            .ReturnsAsync([]);
-
-        var service = new StorageRecyclingService(_mockDropbox.Object, _mockProgress.Object, _config);
-        var syncResult = CreateSyncResult();
-
-        await service.RecycleDeletedFilesAsync(syncResult);
-
-        _mockProgress.Verify(p => p.ReportMessage("Recycling deleted files for endless storage"), Times.Once);
-    }
-
-    [TestMethod]
     public async Task RecycleDeletedFilesAsync_SkipsNonDeletedEntries()
     {
         // Verifies Program.old.cs line 293
@@ -93,7 +78,10 @@ public class StorageRecyclingServiceTests
         var service = new StorageRecyclingService(_mockDropbox.Object, _mockProgress.Object, _config);
         var syncResult = CreateSyncResult();
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should not call ListRevisionsAsync for non-deleted files
         _mockDropbox.Verify(d => d.ListRevisionsAsync(It.IsAny<string>(), It.IsAny<ListRevisionsMode>(), It.IsAny<int>()), Times.Never);
@@ -112,7 +100,10 @@ public class StorageRecyclingServiceTests
         var service = new StorageRecyclingService(_mockDropbox.Object, _mockProgress.Object, _config);
         var syncResult = CreateSyncResult(existingFiles: existingFiles);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should not call ListRevisionsAsync if file still exists
         _mockDropbox.Verify(d => d.ListRevisionsAsync(It.IsAny<string>(), It.IsAny<ListRevisionsMode>(), It.IsAny<int>()), Times.Never);
@@ -131,7 +122,10 @@ public class StorageRecyclingServiceTests
         var service = new StorageRecyclingService(_mockDropbox.Object, _mockProgress.Object, _config);
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should not call ListRevisionsAsync if parent folder doesn't exist
         _mockDropbox.Verify(d => d.ListRevisionsAsync(It.IsAny<string>(), It.IsAny<ListRevisionsMode>(), It.IsAny<int>()), Times.Never);
@@ -149,7 +143,10 @@ public class StorageRecyclingServiceTests
         var service = new StorageRecyclingService(_mockDropbox.Object, _mockProgress.Object, _config);
         var syncResult = CreateSyncResult();
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should not call ListRevisionsAsync
         _mockDropbox.Verify(d => d.ListRevisionsAsync(It.IsAny<string>(), It.IsAny<ListRevisionsMode>(), It.IsAny<int>()), Times.Never);
@@ -172,7 +169,10 @@ public class StorageRecyclingServiceTests
         var syncResult = CreateSyncResult(existingFolders: folders);
 
         // Should not throw
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         _mockDropbox.Verify(d => d.ListRevisionsAsync("/dropbox/file.zip", It.IsAny<ListRevisionsMode>(), 1), Times.Once);
     }
@@ -209,7 +209,10 @@ public class StorageRecyclingServiceTests
         var folders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) { "", "/dropbox" };
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should not call RestoreAsync for too young files
         _mockDropbox.Verify(d => d.RestoreAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
@@ -247,7 +250,10 @@ public class StorageRecyclingServiceTests
         var folders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) { "", "/dropbox" };
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should not call RestoreAsync for too old files
         _mockDropbox.Verify(d => d.RestoreAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
@@ -299,7 +305,10 @@ public class StorageRecyclingServiceTests
         var folders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) { "", "/dropbox" };
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should call RestoreAsync for 15-day-old file
         _mockDropbox.Verify(d => d.RestoreAsync("/dropbox/file.zip", "abc123def456789"), Times.Once);
@@ -353,7 +362,10 @@ public class StorageRecyclingServiceTests
         var folders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) { "", "/dropbox" };
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // CRITICAL: Exactly 29 days should be INCLUDED (age <= 29, not age < 29)
         // Program.old.cs line 60: (DateTime.UtcNow - rev.ServerDeleted > TimeSpan.FromDays(29))
@@ -418,7 +430,10 @@ public class StorageRecyclingServiceTests
         var folders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) { "", "/dropbox" };
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should restore with the newest revision (rev_new)
         _mockDropbox.Verify(d => d.RestoreAsync("/dropbox/file.zip", "def456789abcd"), Times.Once);
@@ -470,7 +485,10 @@ public class StorageRecyclingServiceTests
         var folders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) { "", "/dropbox" };
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should call DeleteFileAsync immediately (not batch)
         _mockDropbox.Verify(d => d.DeleteFileAsync("/dropbox/file.zip", "abc123def456789"), Times.Once);
@@ -523,7 +541,10 @@ public class StorageRecyclingServiceTests
         var folders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) { "", "/dropbox" };
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should call DeleteBatchAsync at the end (line 347)
         _mockDropbox.Verify(d => d.DeleteFileAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
@@ -586,7 +607,10 @@ public class StorageRecyclingServiceTests
         var folders = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase) { "", "/dropbox" };
         var syncResult = CreateSyncResult(existingFolders: folders);
 
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should NOT call DeleteFileAsync for the 32GB file because queue is not empty
         _mockDropbox.Verify(d => d.DeleteFileAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
@@ -634,7 +658,10 @@ public class StorageRecyclingServiceTests
         var syncResult = CreateSyncResult(existingFolders: folders);
 
         // Should not throw
-        await service.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await service.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await service.RestoreAndDeleteFilesAsync(deletedFiles);
 
         _mockProgress.Verify(p => p.ReportMessage(It.Is<string>(s => s.Contains("Error recycling file"))), Times.Once);
     }

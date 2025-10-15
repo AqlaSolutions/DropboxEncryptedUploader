@@ -39,7 +39,8 @@ public class ConsoleProgressReporter : IProgressReporter
             var progressText = $" {relativePath} {bytesProcessed / (double)totalBytes * 100:F0}%";
             if (_useCarriageReturn)
                 Console.Write($"\r{progressText}");
-            // In non-interactive mode, don't spam with progress updates
+            else
+                Console.WriteLine(progressText);
         }
     }
 

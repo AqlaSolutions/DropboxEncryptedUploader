@@ -74,8 +74,9 @@ public class SyncServiceTests
             .ReturnsAsync([]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        await service.AnalyzeSyncAsync();
+        await facade.AnalyzeSyncAsync();
 
         _mockProgress.Verify(p => p.ReportMessage("Local directory does not exist: " + _config.LocalDirectory), Times.Once);
     }
@@ -90,8 +91,9 @@ public class SyncServiceTests
             .ReturnsAsync([]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         Assert.AreEqual(0, result.FilesToUpload.Count);
     }
@@ -112,8 +114,9 @@ public class SyncServiceTests
             .ReturnsAsync([]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // OrdinalIgnoreCase should treat them as same file (only one entry)
         Assert.AreEqual(1, result.FilesToUpload.Count);
@@ -130,8 +133,9 @@ public class SyncServiceTests
             .ReturnsAsync([]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         Assert.IsTrue(result.ExistingFolders.Contains(""));
     }
@@ -150,8 +154,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         Assert.IsTrue(result.ExistingFiles.Contains("/dropbox/test.zip"));
     }
@@ -177,8 +182,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // Should match test.txt with test.txt.zip (after stripping .zip)
         Assert.AreEqual(0, result.FilesToUpload.Count);
@@ -198,8 +204,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // File without .zip extension should be skipped during path comparison (continue statement)
         // but it's still added to ExistingFiles collection
@@ -229,8 +236,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // Should match test.zip with test.zip (no stripping)
         Assert.AreEqual(0, result.FilesToUpload.Count);
@@ -257,8 +265,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // File should be skipped (within 1 second tolerance)
         Assert.AreEqual(0, result.FilesToUpload.Count);
@@ -285,8 +294,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // Should be skipped (< 1 second)
         Assert.AreEqual(0, result.FilesToUpload.Count);
@@ -313,8 +323,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // File should be included (> 1 second difference)
         Assert.AreEqual(1, result.FilesToUpload.Count);
@@ -335,8 +346,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         Assert.IsTrue(result.FilesToDelete.Contains("/dropbox/deleted.txt.zip"));
     }
@@ -355,8 +367,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // Should NOT be marked for deletion when local directory doesn't exist
         Assert.AreEqual(0, result.FilesToDelete.Count);
@@ -377,8 +390,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         Assert.IsTrue(result.ExistingFolders.Contains("/dropbox/subfolder"));
     }
@@ -404,8 +418,9 @@ public class SyncServiceTests
             .ReturnsAsync([metadata]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         // Should match sub\test.txt with sub/test.txt.zip (after conversion)
         Assert.AreEqual(0, result.FilesToUpload.Count);
@@ -429,8 +444,9 @@ public class SyncServiceTests
             .ReturnsAsync([]);
 
         var service = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
+        var facade = new SyncFacade(service, _mockFileSystem.Object, _config);
 
-        var result = await service.AnalyzeSyncAsync();
+        var result = await facade.AnalyzeSyncAsync();
 
         Assert.AreEqual(1, result.FilesToUpload.Count);
         Assert.AreEqual("/dropbox/test.txt.zip", result.FilesToUpload[0].RemotePath);

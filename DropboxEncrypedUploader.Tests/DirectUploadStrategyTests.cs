@@ -45,7 +45,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Should call SimpleUploadAsync with empty array
         _mockSessionManager.Verify(s => s.SimpleUploadAsync(
@@ -53,53 +53,12 @@ public class DirectUploadStrategyTests
             It.Is<byte[]>(b => b.Length == 0),
             0), Times.Once);
 
-        // Should NOT call OpenNextFile for empty files
-        _mockReader.Verify(r => r.OpenNextFile(), Times.Never);
-
         // Should report complete with "(empty file)" suffix
         _mockProgress.Verify(p => p.ReportComplete("test.txt", "(empty file)"), Times.Once);
     }
 
-    [TestMethod]
-    public async Task UploadFileAsync_NonEmptyFile_CallsOpenNextFile()
-    {
-        // Verifies Program.old.cs line 224 (PrepareReader -> OpenNextFile)
-        var fileToUpload = new FileToUpload(
-            "test.txt",
-            @"C:\local\test.txt",
-            "/dropbox/test.txt",
-            100,
-            DateTime.UtcNow);
-
-        _mockReader.Setup(r => r.ReadNextBlock()).Returns(0);
-
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
-
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
-
-        _mockReader.Verify(r => r.OpenNextFile(), Times.Once);
-    }
-
-    [TestMethod]
-    public async Task UploadFileAsync_SetsNextFileForPreOpening()
-    {
-        // Verifies Program.old.cs lines 484-485 - pre-opening optimization
-        var fileToUpload = new FileToUpload(
-            "test.txt",
-            @"C:\local\test.txt",
-            "/dropbox/test.txt",
-            100,
-            DateTime.UtcNow);
-
-        _mockReader.Setup(r => r.ReadNextBlock()).Returns(0);
-        _mockReader.SetupProperty(r => r.NextFile);
-
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
-
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], @"C:\local\next.txt");
-
-        _mockReader.VerifySet(r => r.NextFile = It.Is<(string, object)>(t => t.Item1 == @"C:\local\next.txt"), Times.Once);
-    }
+    // NOTE: Reader state management tests removed - now handled by Program.cs
+    // OpenNextFile() and NextFile assignment are orchestrated by the caller, not the strategy
 
     [TestMethod]
     public async Task UploadFileAsync_ReportsProgress()
@@ -118,7 +77,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         _mockProgress.Verify(p => p.ReportProgress("test.txt", 0, 100), Times.Once);
         _mockProgress.Verify(p => p.ReportProgress("test.txt", 100, 100), Times.Once);
@@ -141,7 +100,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         _mockProgress.Verify(p => p.ReportComplete("test.txt", ""), Times.Once);
     }
@@ -163,7 +122,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Should call SimpleUploadAsync (no session)
         _mockSessionManager.Verify(s => s.SimpleUploadAsync(
@@ -201,7 +160,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Should start session for first chunk (not last)
         _mockSessionManager.Verify(s => s.StartSessionAsync(
@@ -245,7 +204,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // First chunk: Start session (not last chunk)
         _mockSessionManager.Verify(s => s.StartSessionAsync(
@@ -294,7 +253,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Chunk 1 (0-100): Start
         _mockSessionManager.Verify(s => s.StartSessionAsync(
@@ -336,7 +295,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         _mockSessionManager.Verify(s => s.SimpleUploadAsync(
             It.Is<CommitInfo>(c =>
@@ -375,7 +334,7 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Verify offsets based on actual bytes read:
         // Chunk 1: read 100 bytes → Start with offset 0, length 100
@@ -408,12 +367,130 @@ public class DirectUploadStrategyTests
 
         var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
 
-        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object, new byte[1024], null);
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
         // Should call SimpleUploadAsync for empty file
         _mockSessionManager.Verify(s => s.SimpleUploadAsync(
             It.IsAny<CommitInfo>(),
             It.Is<byte[]>(b => b.Length == 0),
             0), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task UploadFileAsync_UploadsCorrectDataNotGarbage()
+    {
+        // CRITICAL: Verifies that DirectUploadStrategy uploads the actual file data, not garbage
+        // This is the key test to prevent regression of the original bug
+        var fileToUpload = new FileToUpload(
+            "test.txt",
+            @"C:\local\test.txt",
+            "/dropbox/test.txt",
+            10,
+            DateTime.UtcNow);
+
+        // Create reader buffer with specific test data
+        var expectedData = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+        var readerBuffer = new byte[100];
+        Array.Copy(expectedData, readerBuffer, expectedData.Length);
+
+        int callCount = 0;
+        _mockReader.Setup(r => r.ReadNextBlock()).Returns(() => callCount++ == 0 ? 10 : 0);
+        _mockReader.Setup(r => r.CurrentBuffer).Returns(readerBuffer);
+
+        byte[] capturedData = null;
+        _mockSessionManager.Setup(s => s.SimpleUploadAsync(
+                It.IsAny<CommitInfo>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<long>()))
+            .Callback<CommitInfo, byte[], long>((c, b, l) =>
+            {
+                // Capture the actual data that would be uploaded
+                capturedData = new byte[l];
+                Array.Copy(b, capturedData, l);
+            })
+            .ReturnsAsync(new FileMetadata());
+
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
+
+        // Verify the correct data is uploaded (not garbage)
+        Assert.IsNotNull(capturedData, "Data should have been captured");
+        CollectionAssert.AreEqual(expectedData, capturedData,
+            "DirectUploadStrategy must upload the actual file data from reader.CurrentBuffer, not garbage");
+    }
+
+    [TestMethod]
+    public async Task UploadFileAsync_MultiChunk_UploadsCorrectDataForEachChunk()
+    {
+        // CRITICAL: Verifies that each chunk uploads the correct data, not garbage
+        var fileToUpload = new FileToUpload(
+            "test.txt",
+            @"C:\local\test.txt",
+            "/dropbox/test.txt",
+            20,
+            DateTime.UtcNow);
+
+        var chunk1Data = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+        var chunk2Data = new byte[] { 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 };
+        var readerBuffer = new byte[100];
+
+        int callCount = 0;
+        _mockReader.Setup(r => r.ReadNextBlock()).Returns(() =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                Array.Copy(chunk1Data, readerBuffer, chunk1Data.Length);
+                return 10;
+            }
+            if (callCount == 2)
+            {
+                Array.Copy(chunk2Data, readerBuffer, chunk2Data.Length);
+                return 10;
+            }
+            return 0;
+        });
+        _mockReader.Setup(r => r.CurrentBuffer).Returns(readerBuffer);
+
+        var capturedChunks = new System.Collections.Generic.List<byte[]>();
+
+        _mockSessionManager.Setup(s => s.StartSessionAsync(
+                It.IsAny<byte[]>(),
+                It.IsAny<long>()))
+            .Callback<byte[], long>((b, l) =>
+            {
+                // Capture the actual data that would be uploaded
+                var chunk = new byte[l];
+                Array.Copy(b, chunk, l);
+                capturedChunks.Add(chunk);
+            })
+            .ReturnsAsync(new UploadSessionStartResult("session-123"));
+
+        _mockSessionManager.Setup(s => s.FinishSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<long>(),
+                It.IsAny<CommitInfo>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<long>()))
+            .Callback<string, long, CommitInfo, byte[], long>((sid, off, c, b, l) =>
+            {
+                // Capture the actual data that would be uploaded
+                var chunk = new byte[l];
+                Array.Copy(b, chunk, l);
+                capturedChunks.Add(chunk);
+            })
+            .ReturnsAsync(new FileMetadata());
+
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+
+        await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
+
+        // Verify both chunks upload the correct data (not garbage)
+        Assert.AreEqual(2, capturedChunks.Count, "Should have captured 2 chunks");
+        CollectionAssert.AreEqual(chunk1Data, capturedChunks[0],
+            "First chunk must upload actual file data, not garbage");
+        CollectionAssert.AreEqual(chunk2Data, capturedChunks[1],
+            "Second chunk must upload actual file data, not garbage");
     }
 }

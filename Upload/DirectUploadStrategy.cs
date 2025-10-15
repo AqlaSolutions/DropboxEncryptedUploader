@@ -20,26 +20,18 @@ public class DirectUploadStrategy : BaseUploadStrategy, IUploadStrategy
         _progress = progress;
     }
 
-    public async Task UploadFileAsync(FileToUpload fileToUpload, AsyncMultiFileReader reader, byte[] buffer, string nextFilePathForPreOpen)
+    public async Task UploadFileAsync(FileToUpload fileToUpload, AsyncMultiFileReader reader)
     {
         _progress.ReportProgress(fileToUpload.RelativePath, 0, fileToUpload.FileSize);
 
         var commitInfo = CreateCommitInfo(fileToUpload);
 
-        // Handle empty files explicitly
+        // Handle empty files explicitly (no need to read from reader)
         if (fileToUpload.FileSize == 0)
         {
             await SessionManager.SimpleUploadAsync(commitInfo, [], 0);
             _progress.ReportComplete(fileToUpload.RelativePath, "(empty file)");
             return;
-        }
-
-        reader.OpenNextFile();
-
-        // Set next file for pre-opening optimization (after OpenNextFile clears it)
-        if (nextFilePathForPreOpen != null)
-        {
-            reader.NextFile = (nextFilePathForPreOpen, null);
         }
 
         UploadSessionStartResult session = null;
@@ -52,18 +44,22 @@ public class DirectUploadStrategy : BaseUploadStrategy, IUploadStrategy
             totalBytesRead += read;
             _progress.ReportProgress(fileToUpload.RelativePath, totalBytesRead, fileToUpload.FileSize);
 
+            // No data copy needed - use reader.CurrentBuffer directly
+            // This is safe because the buffer is stable until the next ReadNextBlock() call,
+            // and upload completes (with retries) before we call ReadNextBlock() again
+
             // Check if this is the last chunk
             bool isLastChunk = totalBytesRead >= fileToUpload.FileSize;
 
             if (isLastChunk)
             {
                 // Last chunk: use Finish or Upload
-                await FinishUploadAsync(session, offset, commitInfo, buffer, read);
+                await FinishUploadAsync(session, offset, commitInfo, reader.CurrentBuffer, read);
             }
             else
             {
                 // Not last chunk: use Start or Append
-                session = await UploadChunkAsync(session, offset, buffer, read);
+                session = await UploadChunkAsync(session, offset, reader.CurrentBuffer, read);
             }
 
             offset += read;

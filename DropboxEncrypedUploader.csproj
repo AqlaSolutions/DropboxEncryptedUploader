@@ -88,6 +88,7 @@
     <Compile Include="Services\IStorageRecyclingService.cs" />
     <Compile Include="Services\ISyncService.cs" />
     <Compile Include="Services\StorageRecyclingService.cs" />
+    <Compile Include="Services\SyncFacade.cs" />
     <Compile Include="Services\SyncService.cs" />
     <Compile Include="Upload\BaseUploadStrategy.cs" />
     <Compile Include="Upload\DirectUploadStrategy.cs" />

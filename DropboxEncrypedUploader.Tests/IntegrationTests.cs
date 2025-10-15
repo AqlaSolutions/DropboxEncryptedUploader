@@ -76,7 +76,8 @@ public class IntegrationTests
 
         // Execute sync
         var syncService = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
-        var result = await syncService.AnalyzeSyncAsync();
+        var syncFacade = new SyncFacade(syncService, _mockFileSystem.Object, _config);
+        var result = await syncFacade.AnalyzeSyncAsync();
 
         // Verify results
         Assert.AreEqual(1, result.FilesToUpload.Count);
@@ -108,7 +109,8 @@ public class IntegrationTests
 
         // Execute sync
         var syncService = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
-        var result = await syncService.AnalyzeSyncAsync();
+        var syncFacade = new SyncFacade(syncService, _mockFileSystem.Object, _config);
+        var result = await syncFacade.AnalyzeSyncAsync();
 
         // Verify results
         Assert.AreEqual(1, result.FilesToUpload.Count);
@@ -137,7 +139,8 @@ public class IntegrationTests
             .ReturnsAsync([metadata]);
 
         var syncService = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
-        var result = await syncService.AnalyzeSyncAsync();
+        var syncFacade = new SyncFacade(syncService, _mockFileSystem.Object, _config);
+        var result = await syncFacade.AnalyzeSyncAsync();
 
         // Should skip upload (within 1 second tolerance)
         Assert.AreEqual(0, result.FilesToUpload.Count);
@@ -160,7 +163,8 @@ public class IntegrationTests
             .ReturnsAsync([metadata]);
 
         var syncService = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
-        var result = await syncService.AnalyzeSyncAsync();
+        var syncFacade = new SyncFacade(syncService, _mockFileSystem.Object, _config);
+        var result = await syncFacade.AnalyzeSyncAsync();
 
         Assert.AreEqual(0, result.FilesToUpload.Count);
         Assert.AreEqual(1, result.FilesToDelete.Count);
@@ -188,7 +192,8 @@ public class IntegrationTests
             .ReturnsAsync([metadata]);
 
         var syncService = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
-        var result = await syncService.AnalyzeSyncAsync();
+        var syncFacade = new SyncFacade(syncService, _mockFileSystem.Object, _config);
+        var result = await syncFacade.AnalyzeSyncAsync();
 
         // Should match sub\test.txt with sub/test.txt.zip
         Assert.AreEqual(0, result.FilesToUpload.Count);
@@ -246,7 +251,10 @@ public class IntegrationTests
 
         var recyclingService = new StorageRecyclingService(_mockDropbox.Object, _mockProgress.Object, _config);
 
-        await recyclingService.RecycleDeletedFilesAsync(syncResult);
+        var deletedFiles = await recyclingService.ListRecyclableDeletedFilesAsync(
+            syncResult.ExistingFiles,
+            syncResult.ExistingFolders);
+        await recyclingService.RestoreAndDeleteFilesAsync(deletedFiles);
 
         // Should restore and then batch delete
         _mockDropbox.Verify(d => d.RestoreAsync("/dropbox/file.zip", "abc123def456789"), Times.Once);
@@ -274,7 +282,8 @@ public class IntegrationTests
             .ReturnsAsync([]);
 
         var syncService = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
-        var result = await syncService.AnalyzeSyncAsync();
+        var syncFacade = new SyncFacade(syncService, _mockFileSystem.Object, _config);
+        var result = await syncFacade.AnalyzeSyncAsync();
 
         // Should treat as single file (case-insensitive)
         Assert.AreEqual(1, result.FilesToUpload.Count);
@@ -318,7 +327,8 @@ public class IntegrationTests
             .ReturnsAsync([]);
 
         var syncService = new SyncService(_mockFileSystem.Object, _mockDropbox.Object, _mockProgress.Object, _config);
-        var result = await syncService.AnalyzeSyncAsync();
+        var syncFacade = new SyncFacade(syncService, _mockFileSystem.Object, _config);
+        var result = await syncFacade.AnalyzeSyncAsync();
 
         Assert.AreEqual(3, result.FilesToUpload.Count);
         // Files should be in the order returned by GetAllFiles
