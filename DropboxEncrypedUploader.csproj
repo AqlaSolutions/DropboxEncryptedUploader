@@ -70,11 +70,29 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AsyncMultiFileReader.cs" />
-    <Compile Include="CopyStream.cs" />
+    <Compile Include="Configuration\Configuration.cs" />
     <Compile Include="DropboxContentHasher.cs" />
+    <Compile Include="Infrastructure\AsyncMultiFileReader.cs" />
+    <Compile Include="Infrastructure\ConsoleProgressReporter.cs" />
+    <Compile Include="Infrastructure\CopyStream.cs" />
+    <Compile Include="Infrastructure\IProgressReporter.cs" />
+    <Compile Include="Models\FileToUpload.cs" />
+    <Compile Include="Models\SyncResult.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\DropboxService.cs" />
+    <Compile Include="Services\FileSystemService.cs" />
+    <Compile Include="Services\IDropboxService.cs" />
+    <Compile Include="Services\IFileSystemService.cs" />
+    <Compile Include="Services\IStorageRecyclingService.cs" />
+    <Compile Include="Services\ISyncService.cs" />
+    <Compile Include="Services\StorageRecyclingService.cs" />
+    <Compile Include="Services\SyncService.cs" />
+    <Compile Include="Upload\DirectUploadStrategy.cs" />
+    <Compile Include="Upload\EncryptedUploadStrategy.cs" />
+    <Compile Include="Upload\IUploadSessionManager.cs" />
+    <Compile Include="Upload\IUploadStrategy.cs" />
+    <Compile Include="Upload\UploadSessionManager.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

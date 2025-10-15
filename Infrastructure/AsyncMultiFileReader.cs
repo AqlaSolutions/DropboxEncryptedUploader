@@ -8,9 +8,9 @@ namespace DropboxEncrypedUploader
 {
     public class AsyncMultiFileReader : IDisposable
     {
-        public byte[] CurrentBuffer { get; private set; }
-        public (string Name, object Tag) NextFile { get; set; }
-        public (string Name, object Tag) CurrentFile { get; private set; }
+        public virtual byte[] CurrentBuffer { get; protected set; }
+        public virtual (string Name, object Tag) NextFile { get; set; }
+        public virtual (string Name, object Tag) CurrentFile { get; protected set; }
 
         readonly Func<string, object, Stream> _asyncFileStreamFactory;
         byte[] _buffer1;
@@ -43,7 +43,7 @@ namespace DropboxEncrypedUploader
             }
         }
 
-        public int ReadNextBlock()
+        public virtual int ReadNextBlock()
         {
             if (_stream == null) return 0;
 
@@ -76,11 +76,11 @@ namespace DropboxEncrypedUploader
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <exception cref="AggregateException"></exception>
         /// <exception cref="IOException"></exception>
-        public void OpenNextFile()
+        public virtual void OpenNextFile()
         {
             if (_stream != null)
             {

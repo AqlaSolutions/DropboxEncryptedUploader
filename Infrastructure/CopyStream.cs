@@ -14,7 +14,7 @@ namespace DropboxEncrypedUploader
         {
         }
 
-        public Stream CopyTo { get; set; }
+        public new Stream CopyTo { get; set; }
         public override bool CanRead => false;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
@@ -42,7 +42,7 @@ namespace DropboxEncrypedUploader
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            CopyTo.Write(buffer, 0, count);
+            CopyTo.Write(buffer, offset, count);
             _position += count;
         }
 
