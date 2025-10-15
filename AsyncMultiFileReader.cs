@@ -22,7 +22,7 @@ namespace DropboxEncrypedUploader
         public AsyncMultiFileReader(int bufferSize, Func<string, object, Stream> asyncFileStreamFactory = null)
         {
             _asyncFileStreamFactory = asyncFileStreamFactory
-                ?? ((fileName, _) => new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, _buffer1.Length, true));
+                ?? ((fileName, _) => new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read, _buffer1.Length, true));
             _buffer1 = new byte[bufferSize];
             _buffer2 = new byte[bufferSize];
             CurrentBuffer = _buffer1;
@@ -70,9 +70,7 @@ namespace DropboxEncrypedUploader
 
             CurrentBuffer = _buffer1;
 
-            var swap = _buffer2;
-            _buffer2 = _buffer1;
-            _buffer1 = swap;
+            (_buffer2, _buffer1) = (_buffer1, _buffer2);
 
             return read;
         }
@@ -95,13 +93,9 @@ namespace DropboxEncrypedUploader
 
             try
             {
-
-                int read;
-                string opened;
-                object openedTag;
                 var nextFile = NextFile;
 
-                (read, _stream, opened, openedTag) = _preOpenedFile?.Result ?? OpenAndRead(nextFile.Name, nextFile.Tag, _buffer1);
+                (var read, _stream, var opened, var openedTag) = _preOpenedFile?.Result ?? OpenAndRead(nextFile.Name, nextFile.Tag, _buffer1);
 
                 if ((opened != nextFile.Name) || (openedTag != nextFile.Tag))
                 {
