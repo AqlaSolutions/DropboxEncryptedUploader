@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using Dropbox.Api;
 
 namespace DropboxEncrypedUploader.Configuration;
 
@@ -43,6 +46,13 @@ public class Configuration
     // Sync settings
     public double TimestampToleranceSeconds { get; } = 1.0;
 
+    // Session persistence settings
+    public string SessionFilePath { get; private set; }
+    private const int SessionFileRetentionDays = 5;
+
+    // Encryption settings
+    public const int AES_SALT_SIZE = 16; // AES-256 encryption uses 16-byte salt
+
     /// <summary>
     /// Creates and validates a new Configuration instance from command-line arguments.
     /// </summary>
@@ -68,6 +78,9 @@ public class Configuration
             DropboxDirectory += Path.AltDirectorySeparatorChar;
 
         Password = args[3];
+
+        // Generate session file path in AppData with directory hash
+        SessionFilePath = GenerateSessionFilePath(LocalDirectory);
     }
 
     private static bool IsEndingWithSeparator(string s)
@@ -75,5 +88,71 @@ public class Configuration
         return s.Length != 0 &&
                (s[s.Length - 1] == Path.DirectorySeparatorChar ||
                 s[s.Length - 1] == Path.AltDirectorySeparatorChar);
+    }
+
+    /// <summary>
+    /// Generates session file path in AppData with directory-specific hash.
+    /// This allows concurrent runs for different directories while preventing
+    /// conflicts for the same directory.
+    /// </summary>
+    private static string GenerateSessionFilePath(string localDirectory)
+    {
+        var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var appFolder = Path.Combine(appDataPath, "DropboxEncryptedUploader");
+
+        // Create app folder if it doesn't exist
+        if (!Directory.Exists(appFolder))
+        {
+            Directory.CreateDirectory(appFolder);
+        }
+
+        // Compute hash of lowercase directory path
+        using (var sha256 = SHA256.Create())
+        {
+            var bytes = Encoding.UTF8.GetBytes(localDirectory.ToLowerInvariant());
+            var hashBytes = sha256.ComputeHash(bytes);
+            var hash = BitConverter.ToString(hashBytes).Replace("-", "").Substring(0, 32);
+
+            return Path.Combine(appFolder, $"session-{hash}.json");
+        }
+    }
+
+    /// <summary>
+    /// Cleans up session files older than 5 days from AppData.
+    /// Called on application startup to prevent accumulation of stale sessions.
+    /// </summary>
+    public static void CleanupOldSessions()
+    {
+        var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var appFolder = Path.Combine(appDataPath, "DropboxEncryptedUploader");
+
+        if (!Directory.Exists(appFolder))
+            return;
+
+        try
+        {
+            var now = DateTime.UtcNow;
+            var sessionFiles = Directory.GetFiles(appFolder, "session-*.json");
+
+            foreach (var file in sessionFiles)
+            {
+                try
+                {
+                    var fileInfo = new FileInfo(file);
+                    if ((now - fileInfo.LastWriteTimeUtc).TotalDays > SessionFileRetentionDays)
+                    {
+                        File.Delete(file);
+                    }
+                }
+                catch
+                {
+                    // Ignore errors for individual files (might be locked or deleted)
+                }
+            }
+        }
+        catch
+        {
+            // Ignore errors during cleanup - not critical
+        }
     }
 }

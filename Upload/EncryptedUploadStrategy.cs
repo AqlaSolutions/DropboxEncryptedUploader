@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Dropbox.Api.Files;
 using DropboxEncrypedUploader.Infrastructure;
 using DropboxEncrypedUploader.Models;
+using DropboxEncrypedUploader.Services;
 using ICSharpCode.SharpZipLib.Zip;
 
 namespace DropboxEncrypedUploader.Upload;
@@ -21,8 +22,9 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
     public EncryptedUploadStrategy(
         IUploadSessionManager sessionManager,
         IProgressReporter progress,
-        Configuration.Configuration config)
-        : base(sessionManager)
+        Configuration.Configuration config,
+        ISessionPersistenceService sessionPersistence)
+        : base(sessionManager, sessionPersistence, progress)
     {
         _progress = progress;
         _config = config;
@@ -33,36 +35,55 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
     {
         _progress.ReportProgress(fileToUpload.RelativePath, 0, fileToUpload.FileSize);
 
+        PrepareUpload(fileToUpload);
+
+        // Get salt: either from saved session (resuming) or generate fresh (new upload)
+        byte[] salt = GetResumedEncryptionSalt();
+        if (salt == null)
+        {
+            // New upload - generate our own random salt
+            salt = new byte[Configuration.Configuration.AES_SALT_SIZE];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(salt);
+            }
+        }
+
         using (var zipWriterUnderlyingStream = new CopyStream())
         {
             var bufferStream = new MemoryStream(_buffer);
             bufferStream.SetLength(0);
 
-            UploadSessionStartResult session = null;
-            long offset = 0;
             long totalBytesRead = 0;
 
-            using (var zipWriter = new ZipOutputStream(zipWriterUnderlyingStream, _config.ReadBufferSize)
-                   {
-                       IsStreamOwner = false,
-                       Password = _config.Password,
-                       UseZip64 = UseZip64.On
-                   })
+            using (var zipWriter = new ZipOutputStream(zipWriterUnderlyingStream, _config.ReadBufferSize))
             {
+                zipWriter.IsStreamOwner = false;
+                zipWriter.Password = _config.Password;
+                zipWriter.UseZip64 = UseZip64.On;
                 try
                 {
                     zipWriterUnderlyingStream.CopyTo = bufferStream;
-                    zipWriter.SetLevel(0); // No compression
+                    zipWriter.SetLevel(0);
 
-                    // Create ZIP entry with leading slash
                     var entry = _entryFactory.MakeFileEntry(
                         fileToUpload.FullPath,
                         '/' + Path.GetFileName(fileToUpload.RelativePath),
                         useFileSystem: true);
                     entry.AESKeySize = 256;
+
+                    // ALWAYS use deterministic salt (either loaded from session or freshly generated)
+                    bool saltSetSuccessfully = ZipEncryptionHelper.SetDeterministicSaltGenerator(salt);
+                    if (!saltSetSuccessfully)
+                    {
+                        throw new ResumeFailedException("Could not set deterministic salt - SharpZipLib field structure may have changed");
+                    }
+
                     await zipWriter.PutNextEntryAsync(entry);
 
-                    // Read and encrypt file in chunks
+                    // Restore random generator after entry is created
+                    ZipEncryptionHelper.RestoreRandomSaltGenerator();
+
                     int read;
                     while ((read = reader.ReadNextBlock()) > 0)
                     {
@@ -74,10 +95,9 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
                         bufferStream.Position = 0;
                         var length = bufferStream.Length;
 
-                        // Upload chunk
-                        session = await UploadChunkAsync(session, offset, _buffer, length);
+                        // Pass our salt (either loaded or generated) to UploadChunkAsync
+                        await UploadChunkAsync(_buffer, length, salt);
 
-                        offset += length;
                         zipWriterUnderlyingStream.CopyTo = bufferStream = new MemoryStream(_buffer);
                         bufferStream.SetLength(0);
                     }
@@ -103,7 +123,7 @@ public class EncryptedUploadStrategy : BaseUploadStrategy, IUploadStrategy
             var finalLength = bufferStream.Length;
             var commitInfo = CreateCommitInfo(fileToUpload);
 
-            await FinishUploadAsync(session, offset, commitInfo, _buffer, finalLength);
+            await FinishUploadAsync(commitInfo, _buffer, finalLength);
         }
     }
 }

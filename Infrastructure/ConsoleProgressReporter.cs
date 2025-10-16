@@ -8,6 +8,7 @@ namespace DropboxEncrypedUploader.Infrastructure;
 public class ConsoleProgressReporter : IProgressReporter
 {
     private readonly bool _useCarriageReturn;
+    private bool _progressLineActive;
 
     public ConsoleProgressReporter()
     {
@@ -24,12 +25,28 @@ public class ConsoleProgressReporter : IProgressReporter
 
     public void ReportMessage(string message)
     {
+        if (_useCarriageReturn && _progressLineActive)
+        {
+            // Clear the active progress line before writing the message
+            try
+            {
+                var width = Console.BufferWidth;
+                Console.Write("\r" + new string(' ', width - 1) + "\r");
+            }
+            catch
+            {
+                // If we can't get buffer width, just use \r
+                Console.Write("\r");
+            }
+            _progressLineActive = false;
+        }
         Console.WriteLine(message);
     }
 
     public void ReportFileCount(int count)
     {
         Console.WriteLine($"Uploading files: {count}");
+        _progressLineActive = false;
     }
 
     public void ReportProgress(string relativePath, long bytesProcessed, long totalBytes)
@@ -38,9 +55,15 @@ public class ConsoleProgressReporter : IProgressReporter
         {
             var progressText = $" {relativePath} {bytesProcessed / (double)totalBytes * 100:F0}%";
             if (_useCarriageReturn)
+            {
                 Console.Write($"\r{progressText}");
+                _progressLineActive = true;
+            }
             else
+            {
                 Console.WriteLine(progressText);
+                _progressLineActive = false;
+            }
         }
     }
 
@@ -51,8 +74,14 @@ public class ConsoleProgressReporter : IProgressReporter
             completeText += $" {suffix}";
 
         if (_useCarriageReturn)
+        {
             Console.Write($"\r{completeText}\n");
+            _progressLineActive = false;
+        }
         else
+        {
             Console.WriteLine(completeText);
+            _progressLineActive = false;
+        }
     }
 }

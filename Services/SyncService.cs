@@ -74,21 +74,29 @@ public class SyncService(
     }
 
     /// <summary>
-    /// Transforms a remote Dropbox path to a local filename.
+    /// Attempts to transform a remote Dropbox path to its corresponding local filename.
     /// Strips the base directory, handles encryption extension (.zip), and converts path separators.
+    ///
+    /// When using encryption mode, this method filters out files without .zip extension since they
+    /// don't represent encrypted uploads from this application and should not be included in sync comparison.
     /// </summary>
     /// <param name="remotePathLower">The remote path (lowercase) from Dropbox</param>
-    /// <param name="localFileName">The transformed local filename, or null if transformation fails</param>
-    /// <returns>True if transformation succeeded, false if file should be skipped</returns>
+    /// <param name="localFileName">The transformed local filename if successful; null if file should be filtered out</param>
+    /// <returns>
+    /// True if the remote file matches the expected format and should be included in sync comparison.
+    /// False if the file should be skipped (e.g., missing .zip extension in encryption mode).
+    /// </returns>
     private bool TryTransformRemotePathToLocal(string remotePathLower, out string localFileName)
     {
         var relativePath = remotePathLower.Substring(config.DropboxDirectory.Length);
 
-        // Strip .zip extension if using encryption
+        // In encryption mode, filter out files without .zip extension
+        // (they're not encrypted uploads from this application)
         if (config.UseEncryption)
         {
             if (!relativePath.EndsWith(".zip"))
             {
+                // Skip this file - it doesn't match our encrypted file pattern
                 localFileName = null;
                 return false;
             }

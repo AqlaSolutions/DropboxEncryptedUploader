@@ -19,6 +19,7 @@ public class EncryptedUploadStrategyTests
 {
     private Mock<IUploadSessionManager> _mockSessionManager;
     private Mock<IProgressReporter> _mockProgress;
+    private Mock<Services.ISessionPersistenceService> _mockSessionPersistence;
     private Configuration.Configuration _config;
     private Mock<AsyncMultiFileReader> _mockReader;
 
@@ -27,8 +28,12 @@ public class EncryptedUploadStrategyTests
     {
         _mockSessionManager = new Mock<IUploadSessionManager>();
         _mockProgress = new Mock<IProgressReporter>();
+        _mockSessionPersistence = new Mock<Services.ISessionPersistenceService>();
         _config = new Configuration.Configuration(["token", @"C:\local\", "/dropbox/", "password"]);
         _mockReader = new Mock<AsyncMultiFileReader>(_config.ReadBufferSize, null);
+
+        // By default, no existing session (starting fresh)
+        _mockSessionPersistence.Setup(s => s.LoadSession()).Returns((UploadSessionMetadata)null);
     }
 
     // NOTE: Reader state management tests removed - now handled by Program.cs
@@ -47,7 +52,7 @@ public class EncryptedUploadStrategyTests
 
         _mockReader.Setup(r => r.ReadNextBlock()).Returns(0);
 
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
+        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -67,7 +72,7 @@ public class EncryptedUploadStrategyTests
 
         _mockReader.Setup(r => r.ReadNextBlock()).Returns(0);
 
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
+        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -87,7 +92,7 @@ public class EncryptedUploadStrategyTests
 
         _mockReader.Setup(r => r.ReadNextBlock()).Returns(0); // No data
 
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
+        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -121,7 +126,7 @@ public class EncryptedUploadStrategyTests
                 It.IsAny<long>()))
             .ReturnsAsync(new UploadSessionStartResult("session-123"));
 
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
+        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -165,7 +170,7 @@ public class EncryptedUploadStrategyTests
                 It.IsAny<long>()))
             .ReturnsAsync(new UploadSessionStartResult("session-123"));
 
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
+        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -201,7 +206,7 @@ public class EncryptedUploadStrategyTests
 
         _mockReader.Setup(r => r.ReadNextBlock()).Returns(0);
 
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
+        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -216,9 +221,10 @@ public class EncryptedUploadStrategyTests
     }
 
     [TestMethod]
-    public async Task UploadFileAsync_ExceptionDuringZip_StillReported()
+    public async Task UploadFileAsync_ExceptionDuringZip_PropagatesCorrectly()
     {
-        // Verifies Program.old.cs lines 197-204 - exception handling
+        // Verifies fail-fast error handling - exceptions should propagate to caller
+        // Upload strategies do NOT catch exceptions per SOLID principles
         var fileToUpload = new FileToUpload(
             "test.txt",
             @"C:\local\test.txt",
@@ -228,11 +234,10 @@ public class EncryptedUploadStrategyTests
 
         _mockReader.Setup(r => r.ReadNextBlock()).Throws(new IOException("Read error"));
 
-        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config);
+        var strategy = new EncryptedUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _config, _mockSessionPersistence.Object);
 
+        // Exception should propagate up to caller (Program.cs handles retries)
         await Assert.ThrowsExceptionAsync<IOException>(() =>
             strategy.UploadFileAsync(fileToUpload, _mockReader.Object));
-
-        _mockProgress.Verify(p => p.ReportMessage(It.Is<string>(s => s.Contains("Error during encrypted upload"))), Times.Once);
     }
 }

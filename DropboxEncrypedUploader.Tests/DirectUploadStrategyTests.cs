@@ -18,6 +18,7 @@ public class DirectUploadStrategyTests
 {
     private Mock<IUploadSessionManager> _mockSessionManager;
     private Mock<IProgressReporter> _mockProgress;
+    private Mock<Services.ISessionPersistenceService> _mockSessionPersistence;
     private Mock<AsyncMultiFileReader> _mockReader;
     private Configuration.Configuration _config;
 
@@ -26,10 +27,14 @@ public class DirectUploadStrategyTests
     {
         _mockSessionManager = new Mock<IUploadSessionManager>();
         _mockProgress = new Mock<IProgressReporter>();
+        _mockSessionPersistence = new Mock<Services.ISessionPersistenceService>();
         _config = new Configuration.Configuration(["token", @"C:\local\", "/dropbox/", ""]);
         _mockReader = new Mock<AsyncMultiFileReader>(
             _config.ReadBufferSize,
             null);
+
+        // By default, no existing session (starting fresh)
+        _mockSessionPersistence.Setup(s => s.LoadSession()).Returns((UploadSessionMetadata)null);
     }
 
     [TestMethod]
@@ -43,7 +48,7 @@ public class DirectUploadStrategyTests
             0, // Empty file
             DateTime.UtcNow);
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -75,7 +80,7 @@ public class DirectUploadStrategyTests
         _mockReader.Setup(r => r.ReadNextBlock()).Returns(() => callCount++ == 0 ? 100 : 0);
         _mockReader.Setup(r => r.CurrentBuffer).Returns(new byte[100]);
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -98,7 +103,7 @@ public class DirectUploadStrategyTests
         _mockReader.Setup(r => r.ReadNextBlock()).Returns(() => callCount++ == 0 ? 100 : 0);
         _mockReader.Setup(r => r.CurrentBuffer).Returns(new byte[100]);
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -120,7 +125,7 @@ public class DirectUploadStrategyTests
         _mockReader.Setup(r => r.ReadNextBlock()).Returns(() => callCount++ == 0 ? 100 : 0);
         _mockReader.Setup(r => r.CurrentBuffer).Returns(new byte[100]);
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -158,7 +163,7 @@ public class DirectUploadStrategyTests
                 It.IsAny<long>()))
             .ReturnsAsync(new UploadSessionStartResult("session-123"));
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -202,7 +207,7 @@ public class DirectUploadStrategyTests
                 It.IsAny<long>()))
             .ReturnsAsync(new UploadSessionStartResult("session-123"));
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -251,7 +256,7 @@ public class DirectUploadStrategyTests
                 It.IsAny<long>()))
             .ReturnsAsync(new UploadSessionStartResult("session-123"));
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -293,7 +298,7 @@ public class DirectUploadStrategyTests
         _mockReader.Setup(r => r.ReadNextBlock()).Returns(() => callCount++ == 0 ? 100 : 0);
         _mockReader.Setup(r => r.CurrentBuffer).Returns(new byte[100]);
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -332,7 +337,7 @@ public class DirectUploadStrategyTests
                 It.IsAny<long>()))
             .ReturnsAsync(new UploadSessionStartResult("session-123"));
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -365,7 +370,7 @@ public class DirectUploadStrategyTests
             0,
             DateTime.UtcNow);
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -410,7 +415,7 @@ public class DirectUploadStrategyTests
             })
             .ReturnsAsync(new FileMetadata());
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 
@@ -482,7 +487,7 @@ public class DirectUploadStrategyTests
             })
             .ReturnsAsync(new FileMetadata());
 
-        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object);
+        var strategy = new DirectUploadStrategy(_mockSessionManager.Object, _mockProgress.Object, _mockSessionPersistence.Object);
 
         await strategy.UploadFileAsync(fileToUpload, _mockReader.Object);
 

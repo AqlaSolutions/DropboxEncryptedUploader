@@ -14,7 +14,10 @@ internal class Program
     {
         try
         {
-            // 1. Parse and validate configuration
+            // 1. Clean up old session files
+            Configuration.Configuration.CleanupOldSessions();
+
+            // 2. Parse and validate configuration
             var config = new Configuration.Configuration(args);
 
             // Configure ZIP encoding settings globally (once before any encryption operations)
@@ -30,9 +33,10 @@ internal class Program
             var dropbox = new DropboxService(config);
             var syncService = new SyncService(fileSystem, dropbox, progress, config);
             var syncFacade = new SyncFacade(syncService, fileSystem, config);
+            var sessionPersistence = new SessionPersistenceService(config.SessionFilePath);
             var sessionManager = new UploadSessionManager(dropbox, config.MaxRetries);
-            var encryptedUploadStrategy = new EncryptedUploadStrategy(sessionManager, progress, config);
-            var directUploadStrategy = new DirectUploadStrategy(sessionManager, progress);
+            var encryptedUploadStrategy = new EncryptedUploadStrategy(sessionManager, progress, config, sessionPersistence);
+            var directUploadStrategy = new DirectUploadStrategy(sessionManager, progress, sessionPersistence);
             var recyclingService = new StorageRecyclingService(dropbox, progress, config);
 
             using (dropbox)
@@ -84,8 +88,45 @@ internal class Program
                             reader.NextFile = (syncResult.FilesToUpload[i + 1].FullPath, null);
                         }
 
-                        // Upload file (no per-file try-catch - preserve fail-fast behavior)
-                        await strategy.UploadFileAsync(fileToUpload, reader);
+                        // Upload file with retry on any exception (up to 3 attempts)
+                        for (int attempt = 0;; attempt++)
+                        {
+                            try
+                            {
+                                if (attempt > 0)
+                                {
+                                    // Retry: reopen file from start
+                                    progress.ReportMessage($"Retry attempt {attempt + 1}/3 for {fileToUpload.RelativePath}");
+                                    reader.NextFile = (fileToUpload.FullPath, null);
+                                    reader.OpenNextFile();
+
+                                    // Reset next-file optimization
+                                    if (i < syncResult.FilesToUpload.Count - 1)
+                                    {
+                                        reader.NextFile = (syncResult.FilesToUpload[i + 1].FullPath, null);
+                                    }
+                                }
+
+                                await strategy.UploadFileAsync(fileToUpload, reader);
+                                break;
+                            }
+                            catch (ResumeFailedException ex) when (attempt < 3)
+                            {
+                                // Session is invalid - ensure it's deleted and retry from scratch
+                                sessionPersistence.DeleteSession();
+                                progress.ReportMessage($"Resume failed, starting fresh: {ex.Message}");
+                            }
+                            catch (ResumeFailedException)
+                            {
+                                // Final attempt failed - ensure session is deleted before propagating
+                                sessionPersistence.DeleteSession();
+                                throw;
+                            }
+                            catch (Exception ex) when (attempt < 3)
+                            {
+                                progress.ReportMessage($"Upload failed, retrying: {ex.Message}");
+                            }
+                        }
                     }
                 }
 

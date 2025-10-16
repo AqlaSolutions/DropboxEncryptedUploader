@@ -102,7 +102,7 @@ public class AsyncMultiFileReader : IDisposable
                 (read, _stream, _, _) = OpenAndRead(nextFile.Name, nextFile.Tag, _buffer1);
             }
 
-            CurrentFile = nextFile;;
+            CurrentFile = nextFile;
             _latestReadBytesCount = Task.FromResult(read);
         }
         finally

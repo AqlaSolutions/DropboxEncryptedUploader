@@ -81,9 +81,11 @@
     <Compile Include="EncryptedUploadStrategyTests.cs" />
     <Compile Include="DirectUploadStrategyTests.cs" />
     <Compile Include="IntegrationTests.cs" />
+    <Compile Include="ZipEncryptionHelperTests.cs" />
+    <Compile Include="SessionPersistenceServiceTests.cs" />
+    <Compile Include="BaseUploadStrategyTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-  </ItemGroup>
-  <ItemGroup>
+  </ItemGroup>  <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>

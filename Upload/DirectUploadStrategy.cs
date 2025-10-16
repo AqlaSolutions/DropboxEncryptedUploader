@@ -1,7 +1,9 @@
+using System;
 using System.Threading.Tasks;
 using Dropbox.Api.Files;
 using DropboxEncrypedUploader.Infrastructure;
 using DropboxEncrypedUploader.Models;
+using DropboxEncrypedUploader.Services;
 
 namespace DropboxEncrypedUploader.Upload;
 
@@ -14,8 +16,9 @@ public class DirectUploadStrategy : BaseUploadStrategy, IUploadStrategy
 
     public DirectUploadStrategy(
         IUploadSessionManager sessionManager,
-        IProgressReporter progress)
-        : base(sessionManager)
+        IProgressReporter progress,
+        ISessionPersistenceService sessionPersistence)
+        : base(sessionManager, sessionPersistence, progress)
     {
         _progress = progress;
     }
@@ -34,8 +37,7 @@ public class DirectUploadStrategy : BaseUploadStrategy, IUploadStrategy
             return;
         }
 
-        UploadSessionStartResult session = null;
-        long offset = 0;
+        PrepareUpload(fileToUpload);
         long totalBytesRead = 0;
 
         int read;
@@ -44,25 +46,16 @@ public class DirectUploadStrategy : BaseUploadStrategy, IUploadStrategy
             totalBytesRead += read;
             _progress.ReportProgress(fileToUpload.RelativePath, totalBytesRead, fileToUpload.FileSize);
 
-            // No data copy needed - use reader.CurrentBuffer directly
-            // This is safe because the buffer is stable until the next ReadNextBlock() call,
-            // and upload completes (with retries) before we call ReadNextBlock() again
-
-            // Check if this is the last chunk
             bool isLastChunk = totalBytesRead >= fileToUpload.FileSize;
 
             if (isLastChunk)
             {
-                // Last chunk: use Finish or Upload
-                await FinishUploadAsync(session, offset, commitInfo, reader.CurrentBuffer, read);
+                await FinishUploadAsync(commitInfo, reader.CurrentBuffer, read);
             }
             else
             {
-                // Not last chunk: use Start or Append
-                session = await UploadChunkAsync(session, offset, reader.CurrentBuffer, read);
+                await UploadChunkAsync(reader.CurrentBuffer, read);
             }
-
-            offset += read;
         }
 
         _progress.ReportComplete(fileToUpload.RelativePath);
