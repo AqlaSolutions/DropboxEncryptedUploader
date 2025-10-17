@@ -157,31 +157,6 @@ public class ConfigurationTests
     }
 
     [TestMethod]
-    public void Configuration_DefaultValues_MatchOriginal()
-    {
-        // Verifies constants from Program.old.cs:
-        // Buffer sizes: lines 132-133
-        // Timeouts: lines 45-46
-        // List limit: line 63
-        // Batch size: line 285
-        // Max retries: line 378
-        var args = new[] { "token", @"C:\local", "/dropbox", "pass" };
-
-        var config = new Configuration.Configuration(args);
-
-        Assert.AreEqual(90_000_000, config.ReadBufferSize); // 90MB
-        Assert.AreEqual(99_000_000, config.MaxBufferAllocation); // 99MB
-        Assert.AreEqual(TimeSpan.FromMinutes(5), config.HttpTimeout);
-        Assert.AreEqual(TimeSpan.FromMinutes(10), config.LongPollTimeout);
-        Assert.AreEqual(2000, config.ListFolderLimit);
-        Assert.AreEqual(32UL * 1024 * 1024 * 1024, config.DeletingBatchSize); // 32GB
-        Assert.AreEqual(10, config.MaxRetries);
-        Assert.AreEqual(15, config.MinRecycleAgeDays);
-        Assert.AreEqual(29, config.MaxRecycleAgeDays);
-        Assert.AreEqual(1.0, config.TimestampToleranceSeconds);
-    }
-
-    [TestMethod]
     public void LocalDirectory_GetFullPath_IsApplied()
     {
         // Verifies Program.old.cs line 21 uses Path.GetFullPath

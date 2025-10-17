@@ -47,6 +47,31 @@ internal class Program
                 // 4. Analyze sync
                 var syncResult = await syncFacade.AnalyzeSyncAsync();
 
+                // 4.5. Prioritize resuming active upload session
+                var savedSession = sessionPersistence.LoadSession();
+                if (savedSession != null && syncResult.FilesToUpload.Count > 0)
+                {
+                    // Find the file with active session in the upload queue
+                    int sessionFileIndex = syncResult.FilesToUpload.FindIndex(f =>
+                        string.Equals(f.FullPath, savedSession.FilePath, StringComparison.OrdinalIgnoreCase));
+
+                    if (sessionFileIndex > 0)
+                    {
+                        // Move the file to the front of the queue
+                        var fileToResume = syncResult.FilesToUpload[sessionFileIndex];
+                        syncResult.FilesToUpload.RemoveAt(sessionFileIndex);
+                        syncResult.FilesToUpload.Insert(0, fileToResume);
+                        progress.ReportMessage($"Prioritizing resume of {fileToResume.RelativePath} (session found)");
+                    }
+                    else if (sessionFileIndex == -1)
+                    {
+                        // Session file is no longer in the upload queue (might have been deleted or modified)
+                        progress.ReportMessage($"Session file no longer needs upload, clearing session");
+                        sessionPersistence.DeleteSession();
+                    }
+                    // If sessionFileIndex == 0, file is already at the front, no action needed
+                }
+
                 // 5. Delete files that no longer exist locally
                 if (syncResult.FilesToDelete.Count > 0)
                 {
@@ -78,34 +103,15 @@ internal class Program
                     {
                         var fileToUpload = syncResult.FilesToUpload[i];
 
-                        // Set current file and open it
-                        reader.NextFile = (fileToUpload.FullPath, null);
-                        reader.OpenNextFile();
-
-                        // Set next file for pre-opening optimization
-                        if (i < syncResult.FilesToUpload.Count - 1)
-                        {
-                            reader.NextFile = (syncResult.FilesToUpload[i + 1].FullPath, null);
-                        }
-
-                        // Upload file with retry on any exception (up to 3 attempts)
                         for (int attempt = 0;; attempt++)
                         {
                             try
                             {
-                                if (attempt > 0)
-                                {
-                                    // Retry: reopen file from start
-                                    progress.ReportMessage($"Retry attempt {attempt + 1}/3 for {fileToUpload.RelativePath}");
-                                    reader.NextFile = (fileToUpload.FullPath, null);
-                                    reader.OpenNextFile();
+                                reader.NextFile = (fileToUpload.FullPath, null);
+                                reader.OpenNextFile();
 
-                                    // Reset next-file optimization
-                                    if (i < syncResult.FilesToUpload.Count - 1)
-                                    {
-                                        reader.NextFile = (syncResult.FilesToUpload[i + 1].FullPath, null);
-                                    }
-                                }
+                                if (i < syncResult.FilesToUpload.Count - 1)
+                                    reader.NextFile = (syncResult.FilesToUpload[i + 1].FullPath, null);
 
                                 await strategy.UploadFileAsync(fileToUpload, reader);
                                 break;
@@ -118,6 +124,7 @@ internal class Program
                             catch (Exception ex) when (attempt < 2)
                             {
                                 progress.ReportMessage($"Upload failed, retrying: {ex.Message}");
+                                await Task.Delay(5000);
                             }
                         }
                     }

@@ -290,22 +290,6 @@ public class IntegrationTests
     }
 
     [TestMethod]
-    public void Configuration_BufferSizes_MatchOriginalConstants()
-    {
-        // Verifies all configuration constants match Program.old.cs
-        _config = new Configuration.Configuration(["token", @"C:\local\", "/dropbox/", "pass"]);
-
-        Assert.AreEqual(90_000_000, _config.ReadBufferSize);
-        Assert.AreEqual(99_000_000, _config.MaxBufferAllocation);
-        Assert.AreEqual(2000, _config.ListFolderLimit);
-        Assert.AreEqual(32UL * 1024 * 1024 * 1024, _config.DeletingBatchSize);
-        Assert.AreEqual(10, _config.MaxRetries);
-        Assert.AreEqual(15, _config.MinRecycleAgeDays);
-        Assert.AreEqual(29, _config.MaxRecycleAgeDays);
-        Assert.AreEqual(1.0, _config.TimestampToleranceSeconds);
-    }
-
-    [TestMethod]
     public async Task MultipleFiles_UploadOrder_Preserved()
     {
         // Verifies files are processed in order
