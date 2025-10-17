@@ -75,11 +75,12 @@ public class UploadSessionManager(IDropboxService dropboxService, int maxRetries
             }
             catch (TaskCanceledException) when (retry < maxRetries)
             {
-                // Timeout occurred, will retry with fresh stream
+                // Timeout occurred
             }
             catch (HttpRequestException) when (retry < maxRetries)
             {
-                // same
+                // Probably The remote name could not be resolved
+                await Task.Delay(retry * 1000);
             }
         }
     }

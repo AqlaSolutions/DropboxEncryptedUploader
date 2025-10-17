@@ -110,19 +110,12 @@ internal class Program
                                 await strategy.UploadFileAsync(fileToUpload, reader);
                                 break;
                             }
-                            catch (ResumeFailedException ex) when (attempt < 3)
+                            catch (ResumeFailedException ex) 
                             {
-                                // Session is invalid - ensure it's deleted and retry from scratch
+                                progress.ReportMessage($"Resume upload failed, retrying from scratch: {ex.Message}");
                                 sessionPersistence.DeleteSession();
-                                progress.ReportMessage($"Resume failed, starting fresh: {ex.Message}");
                             }
-                            catch (ResumeFailedException)
-                            {
-                                // Final attempt failed - ensure session is deleted before propagating
-                                sessionPersistence.DeleteSession();
-                                throw;
-                            }
-                            catch (Exception ex) when (attempt < 3)
+                            catch (Exception ex) when (attempt < 2)
                             {
                                 progress.ReportMessage($"Upload failed, retrying: {ex.Message}");
                             }

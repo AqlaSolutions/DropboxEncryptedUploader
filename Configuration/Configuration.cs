@@ -37,7 +37,7 @@ public class Configuration
     public ulong DeletingBatchSize { get; } = 32UL * 1024 * 1024 * 1024; // 32GB
 
     // Retry settings
-    public int MaxRetries { get; } = 10;
+    public int MaxRetries { get; } = 100;
 
     // Storage recycling settings
     public int MinRecycleAgeDays { get; } = 15;
